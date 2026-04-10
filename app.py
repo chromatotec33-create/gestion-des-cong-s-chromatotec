@@ -202,7 +202,9 @@ def check_overlap(user_id: str, start: date, end: date) -> bool:
 def visible_requests_for(user: dict) -> list[dict]:
     query = (
         supabase_admin.table("demandes_conges")
-        .select("id,user_id,date_debut,date_fin,nb_jours,statut,created_at,users(id,nom,email,role,service_id)")
+        .select(
+            "id,user_id,date_debut,date_fin,nb_jours,statut,type_conge,type_conge_autre,duree_type,demi_journee_periode,hors_solde,commentaire_demande,created_at,users(id,nom,email,role,service_id)"
+        )
         .order("created_at", desc=True)
     )
     if user["role"] == ROLE_EMPLOYE:
@@ -339,29 +341,56 @@ def demandes():
 @roles_required(ROLE_EMPLOYE, ROLE_CHEF, ROLE_DIRECTION)
 def create_demande():
     user = current_user()
+    balance = calculate_leave_balance(user)
     if request.method == "POST":
         date_debut = to_date(request.form["date_debut"])
         date_fin = to_date(request.form["date_fin"])
+        type_conge = request.form.get("type_conge", "cp").strip()
+        type_conge_autre = request.form.get("type_conge_autre", "").strip()
+        duree_type = request.form.get("duree_type", "journee_entiere").strip()
+        demi_journee_periode = request.form.get("demi_journee_periode", "").strip()
+        commentaire_demande = request.form.get("commentaire_demande", "").strip()
+        confirm_hors_solde = request.form.get("confirm_hors_solde", "0") == "1"
         commentaire_public = request.form.get("commentaire_public", "").strip()
         commentaire_prive = request.form.get("commentaire_prive", "").strip()
 
+        if type_conge not in {"cp", "sans_solde", "autre"}:
+            flash("Type de congé invalide.", "error")
+            return render_template("create.html", user=user, balance=balance)
+        if type_conge == "autre" and not type_conge_autre:
+            flash("Le champ 'Autre' est obligatoire.", "error")
+            return render_template("create.html", user=user, balance=balance)
+        if duree_type not in {"journee_entiere", "demi_journee"}:
+            flash("Durée invalide.", "error")
+            return render_template("create.html", user=user, balance=balance)
+        if duree_type == "demi_journee":
+            if demi_journee_periode not in {"matin", "apres_midi"}:
+                flash("Précisez matin ou après-midi pour une demi-journée.", "error")
+                return render_template("create.html", user=user, balance=balance)
+            if date_debut != date_fin:
+                flash("Une demi-journée doit concerner une seule date.", "error")
+                return render_template("create.html", user=user, balance=balance)
+
         if date_fin < date_debut:
             flash("La date de fin doit être après la date de début.", "error")
-            return render_template("create.html", user=user)
+            return render_template("create.html", user=user, balance=balance)
 
-        nb_jours = calculate_working_days(date_debut, date_fin)
-        if nb_jours <= 0:
+        nb_jours = 0.5 if duree_type == "demi_journee" else float(calculate_working_days(date_debut, date_fin))
+        if nb_jours <= 0 or (duree_type == "demi_journee" and date_debut.weekday() >= 5):
             flash("La demande doit contenir au moins 1 jour ouvré.", "error")
-            return render_template("create.html", user=user)
+            return render_template("create.html", user=user, balance=balance)
 
         if check_overlap(user["id"], date_debut, date_fin):
             flash("Une demande chevauche déjà cette période.", "error")
-            return render_template("create.html", user=user)
+            return render_template("create.html", user=user, balance=balance)
 
-        balance = calculate_leave_balance(user)
-        if balance["remaining"] < nb_jours:
-            flash("Solde insuffisant.", "error")
-            return render_template("create.html", user=user)
+        hors_solde = False
+        if type_conge == "cp" and balance["remaining"] < nb_jours:
+            if not confirm_hors_solde:
+                flash("Solde insuffisant. Confirmez pour créer une demande hors solde.", "error")
+                return render_template("create.html", user=user, balance=balance)
+            hors_solde = True
+            type_conge = "sans_solde"
 
         demande = (
             supabase_admin.table("demandes_conges")
@@ -372,6 +401,12 @@ def create_demande():
                     "date_fin": date_fin.isoformat(),
                     "nb_jours": nb_jours,
                     "statut": "en_attente",
+                    "type_conge": type_conge,
+                    "type_conge_autre": type_conge_autre or None,
+                    "duree_type": duree_type,
+                    "demi_journee_periode": demi_journee_periode or None,
+                    "hors_solde": hors_solde,
+                    "commentaire_demande": commentaire_demande or None,
                 }
             )
             .execute()
@@ -396,13 +431,16 @@ def create_demande():
                     "type_commentaire": "prive",
                     "contenu": commentaire_prive,
                 }
-            ).execute()
+        ).execute()
 
         log_action(user["id"], "create_demande", f"Demande {demande['id']} créée")
-        flash("Demande créée avec succès.", "success")
+        if hors_solde:
+            flash("Demande créée en hors solde (insuffisance de jours).", "success")
+        else:
+            flash("Demande créée avec succès.", "success")
         return redirect(url_for("dashboard"))
 
-    return render_template("create.html", user=user)
+    return render_template("create.html", user=user, balance=balance)
 
 
 @app.route("/validate", methods=["POST"])
