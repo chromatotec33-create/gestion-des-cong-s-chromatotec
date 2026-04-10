@@ -98,3 +98,28 @@ th, td {
 .flash { padding: .7rem; border-radius: 8px; margin-bottom: .5rem; }
 .flash.error { background: #fee2e2; color: #7f1d1d; }
 .flash.success { background: #dcfce7; color: #14532d; }
+
+.db-status {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  background: #ffffffd9;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: .35rem .55rem;
+  display: inline-flex;
+  gap: .4rem;
+  align-items: center;
+}
+
+.db-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.db-dot.unknown { background: #9ca3af; }
+.db-dot.ok { background: #16a34a; }
+.db-dot.ko { background: #dc2626; }
