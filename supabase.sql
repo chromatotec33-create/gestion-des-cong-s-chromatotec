@@ -225,3 +225,50 @@ with check (user_id = auth.uid());
 create policy "services_read_authenticated"
 on public.services for select
 using (auth.role() = 'authenticated');
+
+-- =========================================
+-- Jeu de données de test (faux comptes)
+-- =========================================
+-- Pré-requis:
+-- 1) Créer d'abord les utilisateurs dans Supabase Auth avec ces emails :
+--    - direction.test@chromatotec.local
+--    - chef.prod.test@chromatotec.local
+--    - chef.qualite.test@chromatotec.local
+--    - employe.prod1.test@chromatotec.local
+--    - employe.prod2.test@chromatotec.local
+--    - employe.qualite1.test@chromatotec.local
+-- 2) Exécuter ce bloc pour alimenter public.services + public.users.
+
+insert into public.services (nom)
+values
+  ('Production'),
+  ('Qualité')
+on conflict (nom) do nothing;
+
+insert into public.users (id, nom, email, role, service_id, date_embauche)
+select
+  au.id,
+  seed.nom,
+  seed.email,
+  seed.role::public.user_role,
+  s.id,
+  seed.date_embauche
+from (
+  values
+    ('Nadia Direction', 'direction.test@chromatotec.local', 'direction', null::text, date '2022-01-10'),
+    ('Karim Chef Prod', 'chef.prod.test@chromatotec.local', 'chef_service', 'Production', date '2022-09-01'),
+    ('Ines Chef Qualite', 'chef.qualite.test@chromatotec.local', 'chef_service', 'Qualité', date '2023-02-01'),
+    ('Samir Employe Prod', 'employe.prod1.test@chromatotec.local', 'employe', 'Production', date '2024-02-15'),
+    ('Leila Employe Prod', 'employe.prod2.test@chromatotec.local', 'employe', 'Production', date '2025-01-10'),
+    ('Youssef Employe Qualite', 'employe.qualite1.test@chromatotec.local', 'employe', 'Qualité', date '2024-11-05')
+) as seed(nom, email, role, service_name, date_embauche)
+join auth.users au on au.email = seed.email
+left join public.services s on s.nom = seed.service_name
+on conflict (id) do update
+set
+  nom = excluded.nom,
+  email = excluded.email,
+  role = excluded.role,
+  service_id = excluded.service_id,
+  date_embauche = excluded.date_embauche,
+  updated_at = now();

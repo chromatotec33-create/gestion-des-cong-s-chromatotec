@@ -56,3 +56,6 @@
 - Commentaires publics/privés
 - Historique des actions
 - Génération PDF du bon de congé après validation finale
+
+## Jeu de faux comptes (tests)
+- Voir `TEST_ACCOUNTS.md` pour des comptes de test par catégorie (direction, chefs de service, employés), avec SQL prêt à exécuter.
