@@ -10,6 +10,7 @@
           <th>ID</th>
           <th>Employé</th>
           <th>Période</th>
+          <th>Type</th>
           <th>Jours</th>
           <th>Statut</th>
           <th>Actions</th>
@@ -21,10 +22,24 @@
           <td>{{ d.id }}</td>
           <td>{{ d.users.nom if d.users else '-' }}</td>
           <td>{{ d.date_debut }} → {{ d.date_fin }}</td>
+          <td>
+            {% if d.type_conge == 'autre' %}
+              Autre: {{ d.type_conge_autre }}
+            {% elif d.type_conge == 'sans_solde' %}
+              Sans solde
+            {% else %}
+              CP
+            {% endif %}
+            <br />
+            <small class="muted">{{ 'Demi-journée (' ~ d.demi_journee_periode ~ ')' if d.duree_type == 'demi_journee' else 'Journée entière' }}</small>
+            {% if d.hors_solde %}
+              <div><span class="pill warning">⚠ Hors solde</span></div>
+            {% endif %}
+          </td>
           <td>{{ d.nb_jours }}</td>
           <td>{{ d.statut }}</td>
           <td>
-            {% if user.role in [ROLE_CHEF, ROLE_DIRECTION] and d.statut not in ['valide_direction', 'refuse_chef', 'refuse_direction'] %}
+            {% if user.role in ['chef_service', 'direction'] and d.statut not in ['valide_direction', 'refuse_chef', 'refuse_direction'] %}
             <form method="post" action="{{ url_for('validate_demande') }}" class="inline-form">
               <input type="hidden" name="demande_id" value="{{ d.id }}">
               <input type="text" name="commentaire" placeholder="Commentaire" />
@@ -42,7 +57,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6">Aucune demande trouvée.</td></tr>
+        <tr><td colspan="7">Aucune demande trouvée.</td></tr>
         {% endfor %}
       </tbody>
     </table>

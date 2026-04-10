@@ -3,22 +3,139 @@
 {% block content %}
 <section class="card narrow">
   <h2>Créer une demande de congé</h2>
-  <form method="post" class="form-grid">
-    <label>Date début
-      <input type="date" name="date_debut" required />
-    </label>
-    <label>Date fin
-      <input type="date" name="date_fin" required />
+  <p class="muted">Solde actuel: <strong id="remaining-balance">{{ balance.remaining }}</strong> jour(s)</p>
+  <form method="post" class="form-grid" id="leave-form">
+    <div class="grid-2">
+      <label>Type de congé
+        <select name="type_conge" id="type_conge" required>
+          <option value="cp">CP</option>
+          <option value="sans_solde">Sans solde</option>
+          <option value="autre">Autre</option>
+        </select>
+      </label>
+      <label id="autre-wrapper" class="hidden">Précision (obligatoire si autre)
+        <input type="text" name="type_conge_autre" id="type_conge_autre" placeholder="Ex: Congé exceptionnel" />
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <label>Durée
+        <select name="duree_type" id="duree_type" required>
+          <option value="journee_entiere">Journée entière</option>
+          <option value="demi_journee">Demi-journée</option>
+        </select>
+      </label>
+      <label id="demi-wrapper" class="hidden">Demi-journée
+        <select name="demi_journee_periode" id="demi_journee_periode">
+          <option value="">Choisir...</option>
+          <option value="matin">Matin</option>
+          <option value="apres_midi">Après-midi</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid-2">
+      <label>Date début
+        <input type="date" name="date_debut" id="date_debut" required />
+      </label>
+      <label>Date fin
+        <input type="date" name="date_fin" id="date_fin" required />
+      </label>
+    </div>
+
+    <label>Commentaire (optionnel)
+      <textarea name="commentaire_demande" rows="3" placeholder="Ajoutez des détails si souhaité"></textarea>
     </label>
     <label>Commentaire public
       <textarea name="commentaire_public" rows="3"></textarea>
     </label>
-    {% if user.role in [ROLE_CHEF, ROLE_DIRECTION] %}
-    <label>Commentaire privé (managers)
-      <textarea name="commentaire_prive" rows="3"></textarea>
-    </label>
+    {% if user.role in ['chef_service', 'direction'] %}
+      <label>Commentaire privé (managers)
+        <textarea name="commentaire_prive" rows="3"></textarea>
+      </label>
     {% endif %}
-    <button type="submit">Soumettre</button>
+    <input type="hidden" name="confirm_hors_solde" id="confirm_hors_solde" value="0" />
+    <button type="submit">Soumettre la demande</button>
   </form>
 </section>
+
+<dialog id="warning-modal" class="modern-modal">
+  <h3>Solde insuffisant</h3>
+  <p>Votre solde est insuffisant pour cette demande. Voulez-vous continuer en demande <strong>sans solde</strong> ?</p>
+  <div class="modal-actions">
+    <button type="button" class="secondary" id="cancel-modal">Annuler</button>
+    <button type="button" id="confirm-modal">Continuer</button>
+  </div>
+</dialog>
+
+<script>
+  const typeConge = document.getElementById("type_conge");
+  const autreWrapper = document.getElementById("autre-wrapper");
+  const autreInput = document.getElementById("type_conge_autre");
+  const dureeType = document.getElementById("duree_type");
+  const demiWrapper = document.getElementById("demi-wrapper");
+  const demiPeriode = document.getElementById("demi_journee_periode");
+  const leaveForm = document.getElementById("leave-form");
+  const confirmField = document.getElementById("confirm_hors_solde");
+  const remainingBalance = parseFloat(document.getElementById("remaining-balance").textContent || "0");
+  const dateDebut = document.getElementById("date_debut");
+  const dateFin = document.getElementById("date_fin");
+  const modal = document.getElementById("warning-modal");
+
+  function toggleTypeConge() {
+    const isAutre = typeConge.value === "autre";
+    autreWrapper.classList.toggle("hidden", !isAutre);
+    autreInput.required = isAutre;
+  }
+
+  function toggleDuree() {
+    const isHalf = dureeType.value === "demi_journee";
+    demiWrapper.classList.toggle("hidden", !isHalf);
+    demiPeriode.required = isHalf;
+    if (isHalf && dateDebut.value) {
+      dateFin.value = dateDebut.value;
+    }
+  }
+
+  function workingDays(start, end) {
+    let count = 0;
+    const current = new Date(start);
+    const finish = new Date(end);
+    while (current <= finish) {
+      const day = current.getDay();
+      if (day !== 0 && day !== 6) count += 1;
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
+  }
+
+  typeConge.addEventListener("change", toggleTypeConge);
+  dureeType.addEventListener("change", toggleDuree);
+  dateDebut.addEventListener("change", () => {
+    if (dureeType.value === "demi_journee") {
+      dateFin.value = dateDebut.value;
+    }
+  });
+  toggleTypeConge();
+  toggleDuree();
+
+  leaveForm.addEventListener("submit", (event) => {
+    confirmField.value = "0";
+    if (typeConge.value !== "cp") return;
+    if (!dateDebut.value || !dateFin.value) return;
+
+    const asked = dureeType.value === "demi_journee" ? 0.5 : workingDays(dateDebut.value, dateFin.value);
+    if (asked <= remainingBalance) return;
+
+    event.preventDefault();
+    modal.showModal();
+  });
+
+  document.getElementById("cancel-modal").addEventListener("click", () => modal.close());
+  document.getElementById("confirm-modal").addEventListener("click", () => {
+    confirmField.value = "1";
+    modal.close();
+    leaveForm.submit();
+  });
+</script>
 {% endblock %}

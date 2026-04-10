@@ -30,6 +30,7 @@
           <th>Employé</th>
           <th>Début</th>
           <th>Fin</th>
+          <th>Type</th>
           <th>Jours</th>
           <th>Statut</th>
         </tr>
@@ -41,11 +42,23 @@
           <td>{{ d.users.nom if d.users else '-' }}</td>
           <td>{{ d.date_debut }}</td>
           <td>{{ d.date_fin }}</td>
+          <td>
+            {% if d.type_conge == 'autre' %}
+              Autre: {{ d.type_conge_autre }}
+            {% elif d.type_conge == 'sans_solde' %}
+              Sans solde
+            {% else %}
+              CP
+            {% endif %}
+            {% if d.hors_solde %}
+              <div><span class="pill warning">⚠ Hors solde</span></div>
+            {% endif %}
+          </td>
           <td>{{ d.nb_jours }}</td>
           <td>{{ d.statut }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6">Aucune demande</td></tr>
+        <tr><td colspan="7">Aucune demande</td></tr>
         {% endfor %}
       </tbody>
     </table>

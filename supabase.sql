@@ -39,10 +39,21 @@ create table if not exists public.demandes_conges (
   date_debut date not null,
   date_fin date not null,
   nb_jours numeric(6,2) not null check (nb_jours > 0),
+  type_conge text not null default 'cp',
+  type_conge_autre text,
+  duree_type text not null default 'journee_entiere',
+  demi_journee_periode text,
+  hors_solde boolean not null default false,
+  commentaire_demande text,
   statut public.demande_statut not null default 'en_attente',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint dates_valides check (date_fin >= date_debut)
+  constraint dates_valides check (date_fin >= date_debut),
+  constraint type_conge_valide check (type_conge in ('cp', 'sans_solde', 'autre')),
+  constraint duree_type_valide check (duree_type in ('journee_entiere', 'demi_journee')),
+  constraint demi_journee_periode_valide check (
+    demi_journee_periode is null or demi_journee_periode in ('matin', 'apres_midi')
+  )
 );
 
 create table if not exists public.commentaires_demandes (
@@ -89,6 +100,47 @@ for each row execute procedure public.set_updated_at();
 create trigger tr_demandes_updated_at
 before update on public.demandes_conges
 for each row execute procedure public.set_updated_at();
+
+-- Backfill/migration-safe columns for demandes_conges
+alter table public.demandes_conges add column if not exists type_conge text not null default 'cp';
+alter table public.demandes_conges add column if not exists type_conge_autre text;
+alter table public.demandes_conges add column if not exists duree_type text not null default 'journee_entiere';
+alter table public.demandes_conges add column if not exists demi_journee_periode text;
+alter table public.demandes_conges add column if not exists hors_solde boolean not null default false;
+alter table public.demandes_conges add column if not exists commentaire_demande text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'type_conge_valide'
+      and conrelid = 'public.demandes_conges'::regclass
+  ) then
+    alter table public.demandes_conges
+      add constraint type_conge_valide check (type_conge in ('cp', 'sans_solde', 'autre'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'duree_type_valide'
+      and conrelid = 'public.demandes_conges'::regclass
+  ) then
+    alter table public.demandes_conges
+      add constraint duree_type_valide check (duree_type in ('journee_entiere', 'demi_journee'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'demi_journee_periode_valide'
+      and conrelid = 'public.demandes_conges'::regclass
+  ) then
+    alter table public.demandes_conges
+      add constraint demi_journee_periode_valide check (
+        demi_journee_periode is null or demi_journee_periode in ('matin', 'apres_midi')
+      );
+  end if;
+end
+$$;
 
 -- Role helper functions
 create or replace function public.current_user_role()
@@ -225,3 +277,50 @@ with check (user_id = auth.uid());
 create policy "services_read_authenticated"
 on public.services for select
 using (auth.role() = 'authenticated');
+
+-- =========================================
+-- Jeu de données de test (faux comptes)
+-- =========================================
+-- Pré-requis:
+-- 1) Créer d'abord les utilisateurs dans Supabase Auth avec ces emails :
+--    - direction.test@chromatotec.local
+--    - chef.prod.test@chromatotec.local
+--    - chef.qualite.test@chromatotec.local
+--    - employe.prod1.test@chromatotec.local
+--    - employe.prod2.test@chromatotec.local
+--    - employe.qualite1.test@chromatotec.local
+-- 2) Exécuter ce bloc pour alimenter public.services + public.users.
+
+insert into public.services (nom)
+values
+  ('Production'),
+  ('Qualité')
+on conflict (nom) do nothing;
+
+insert into public.users (id, nom, email, role, service_id, date_embauche)
+select
+  au.id,
+  seed.nom,
+  seed.email,
+  seed.role::public.user_role,
+  s.id,
+  seed.date_embauche
+from (
+  values
+    ('Nadia Direction', 'direction.test@chromatotec.local', 'direction', null::text, date '2022-01-10'),
+    ('Karim Chef Prod', 'chef.prod.test@chromatotec.local', 'chef_service', 'Production', date '2022-09-01'),
+    ('Ines Chef Qualite', 'chef.qualite.test@chromatotec.local', 'chef_service', 'Qualité', date '2023-02-01'),
+    ('Samir Employe Prod', 'employe.prod1.test@chromatotec.local', 'employe', 'Production', date '2024-02-15'),
+    ('Leila Employe Prod', 'employe.prod2.test@chromatotec.local', 'employe', 'Production', date '2025-01-10'),
+    ('Youssef Employe Qualite', 'employe.qualite1.test@chromatotec.local', 'employe', 'Qualité', date '2024-11-05')
+) as seed(nom, email, role, service_name, date_embauche)
+join auth.users au on au.email = seed.email
+left join public.services s on s.nom = seed.service_name
+on conflict (id) do update
+set
+  nom = excluded.nom,
+  email = excluded.email,
+  role = excluded.role,
+  service_id = excluded.service_id,
+  date_embauche = excluded.date_embauche,
+  updated_at = now();
