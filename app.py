@@ -258,21 +258,34 @@ def login():
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
 
-        auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+        try:
+            auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+        except Exception:
+            flash("Connexion impossible pour le moment. Vérifiez vos identifiants ou réessayez.", "error")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
+
         if not auth.user:
             flash("Connexion invalide.", "error")
             return render_template(
                 "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
             )
 
-        profile = (
-            supabase_admin.table("users")
-            .select("id,nom,email,role,service_id,date_embauche")
-            .eq("id", auth.user.id)
-            .single()
-            .execute()
-            .data
-        )
+        try:
+            profile = (
+                supabase_admin.table("users")
+                .select("id,nom,email,role,service_id,date_embauche")
+                .eq("id", auth.user.id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception:
+            flash("Erreur lors de la récupération du profil utilisateur.", "error")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
 
         if not profile:
             flash("Profil utilisateur introuvable.", "error")
