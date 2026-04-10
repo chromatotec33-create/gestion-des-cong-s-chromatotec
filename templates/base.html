@@ -32,5 +32,31 @@
 
     {% block content %}{% endblock %}
   </main>
+
+  <div class="db-status" id="db-status" aria-live="polite">
+    <span class="db-dot unknown" id="db-dot"></span>
+    <span class="db-text" id="db-text">Vérification de la base...</span>
+  </div>
+
+  <script>
+    async function refreshDbStatus() {
+      const dot = document.getElementById("db-dot");
+      const text = document.getElementById("db-text");
+      try {
+        const response = await fetch("{{ url_for('db_status') }}", { cache: "no-store" });
+        const payload = await response.json();
+        dot.classList.remove("unknown", "ok", "ko");
+        dot.classList.add(payload.connected ? "ok" : "ko");
+        text.textContent = payload.message;
+      } catch (error) {
+        dot.classList.remove("unknown", "ok");
+        dot.classList.add("ko");
+        text.textContent = "Impossible de joindre la base";
+      }
+    }
+
+    refreshDbStatus();
+    setInterval(refreshDbStatus, 30000);
+  </script>
 </body>
 </html>

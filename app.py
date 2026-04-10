@@ -5,7 +5,7 @@ from functools import wraps
 from io import BytesIO
 
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from supabase import Client, create_client
@@ -30,6 +30,14 @@ ROLE_CHEF = "chef_service"
 ROLE_DIRECTION = "direction"
 
 FINAL_STATUSES = {"valide_direction", "refuse_chef", "refuse_direction"}
+TEST_ACCOUNTS = [
+    {"label": "Direction", "email": "direction.test@chromatotec.local"},
+    {"label": "Chef service (Production)", "email": "chef.prod.test@chromatotec.local"},
+    {"label": "Chef service (Qualité)", "email": "chef.qualite.test@chromatotec.local"},
+    {"label": "Employé (Production)", "email": "employe.prod1.test@chromatotec.local"},
+    {"label": "Employé (Production)", "email": "employe.prod2.test@chromatotec.local"},
+    {"label": "Employé (Qualité)", "email": "employe.qualite1.test@chromatotec.local"},
+]
 
 
 def today_utc() -> date:
@@ -145,6 +153,14 @@ def log_action(user_id: str, action: str, commentaire: str = "") -> None:
     ).execute()
 
 
+def check_database_connection() -> tuple[bool, str]:
+    try:
+        supabase_admin.table("services").select("id").limit(1).execute()
+        return True, "Connecté à la base de données"
+    except Exception:
+        return False, "Base de données indisponible"
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -232,34 +248,64 @@ def index():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    db_connected, db_message = check_database_connection()
+
     if request.method == "POST":
+        if not db_connected:
+            flash("Erreur de connexion à la base de données. Réessayez plus tard.", "error")
+            return render_template("login.html", test_accounts=TEST_ACCOUNTS, db_connected=False, db_message=db_message)
+
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
 
-        auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+        try:
+            auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+        except Exception:
+            flash("Connexion impossible pour le moment. Vérifiez vos identifiants ou réessayez.", "error")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
+
         if not auth.user:
             flash("Connexion invalide.", "error")
-            return render_template("login.html")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
 
-        profile = (
-            supabase_admin.table("users")
-            .select("id,nom,email,role,service_id,date_embauche")
-            .eq("id", auth.user.id)
-            .single()
-            .execute()
-            .data
-        )
+        try:
+            profile = (
+                supabase_admin.table("users")
+                .select("id,nom,email,role,service_id,date_embauche")
+                .eq("id", auth.user.id)
+                .single()
+                .execute()
+                .data
+            )
+        except Exception:
+            flash("Erreur lors de la récupération du profil utilisateur.", "error")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
 
         if not profile:
             flash("Profil utilisateur introuvable.", "error")
-            return render_template("login.html")
+            return render_template(
+                "login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message
+            )
 
         session["user_id"] = profile["id"]
         session["role"] = profile["role"]
         log_action(profile["id"], "login", "Connexion utilisateur")
+        flash("Connexion réussie.", "success")
         return redirect(url_for("dashboard"))
 
-    return render_template("login.html")
+    return render_template("login.html", test_accounts=TEST_ACCOUNTS, db_connected=db_connected, db_message=db_message)
+
+
+@app.route("/api/db-status")
+def db_status():
+    connected, message = check_database_connection()
+    return jsonify({"connected": connected, "message": message}), (200 if connected else 503)
 
 
 @app.route("/logout")

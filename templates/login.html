@@ -3,6 +3,7 @@
 {% block content %}
 <section class="card narrow">
   <h2>Connexion</h2>
+  <p class="{{ 'flash success' if db_connected else 'flash error' }}">{{ db_message }}</p>
   <form method="post" class="form-grid">
     <label>Email
       <input type="email" name="email" required />
@@ -12,5 +13,27 @@
     </label>
     <button type="submit">Se connecter</button>
   </form>
+</section>
+
+<section class="card narrow">
+  <h3>Comptes fake de test</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for account in test_accounts %}
+          <tr>
+            <td>{{ account.label }}</td>
+            <td>{{ account.email }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
