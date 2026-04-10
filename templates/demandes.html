@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Demandes{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Liste des demandes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Employé</th>
+          <th>Période</th>
+          <th>Jours</th>
+          <th>Statut</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in demandes %}
+        <tr>
+          <td>{{ d.id }}</td>
+          <td>{{ d.users.nom if d.users else '-' }}</td>
+          <td>{{ d.date_debut }} → {{ d.date_fin }}</td>
+          <td>{{ d.nb_jours }}</td>
+          <td>{{ d.statut }}</td>
+          <td>
+            {% if user.role in [ROLE_CHEF, ROLE_DIRECTION] and d.statut not in ['valide_direction', 'refuse_chef', 'refuse_direction'] %}
+            <form method="post" action="{{ url_for('validate_demande') }}" class="inline-form">
+              <input type="hidden" name="demande_id" value="{{ d.id }}">
+              <input type="text" name="commentaire" placeholder="Commentaire" />
+              <button type="submit">Valider</button>
+            </form>
+            <form method="post" action="{{ url_for('refuse_demande') }}" class="inline-form">
+              <input type="hidden" name="demande_id" value="{{ d.id }}">
+              <input type="text" name="commentaire" placeholder="Raison refus" />
+              <button class="danger" type="submit">Refuser</button>
+            </form>
+            {% endif %}
+            {% if d.statut == 'valide_direction' %}
+            <a href="{{ url_for('get_pdf', demande_id=d.id) }}">PDF</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">Aucune demande trouvée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
