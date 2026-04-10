@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="grid-2">
+  <article class="card">
+    <h2>Profil</h2>
+    <p><strong>Nom :</strong> {{ user.nom }}</p>
+    <p><strong>Email :</strong> {{ user.email }}</p>
+    <p><strong>Rôle :</strong> {{ user.role }}</p>
+    <p><strong>Date embauche :</strong> {{ user.date_embauche }}</p>
+  </article>
+
+  <article class="card">
+    <h2>Solde de congés</h2>
+    <p>Période : {{ balance.period_start }} → {{ balance.period_end }}</p>
+    <p>Méthode : {{ balance.method }}</p>
+    <p>Acquis : {{ balance.acquired }} jours</p>
+    <p>Pris : {{ balance.taken }} jours</p>
+    <p><strong>Restant : {{ balance.remaining }} jours</strong></p>
+  </article>
+</section>
+
+<section class="card">
+  <h2>Dernières demandes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Employé</th>
+          <th>Début</th>
+          <th>Fin</th>
+          <th>Jours</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in demandes %}
+        <tr>
+          <td>{{ d.id }}</td>
+          <td>{{ d.users.nom if d.users else '-' }}</td>
+          <td>{{ d.date_debut }}</td>
+          <td>{{ d.date_fin }}</td>
+          <td>{{ d.nb_jours }}</td>
+          <td>{{ d.statut }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">Aucune demande</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

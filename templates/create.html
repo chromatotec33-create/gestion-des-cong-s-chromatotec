@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}Nouvelle demande{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h2>Créer une demande de congé</h2>
+  <form method="post" class="form-grid">
+    <label>Date début
+      <input type="date" name="date_debut" required />
+    </label>
+    <label>Date fin
+      <input type="date" name="date_fin" required />
+    </label>
+    <label>Commentaire public
+      <textarea name="commentaire_public" rows="3"></textarea>
+    </label>
+    {% if user.role in [ROLE_CHEF, ROLE_DIRECTION] %}
+    <label>Commentaire privé (managers)
+      <textarea name="commentaire_prive" rows="3"></textarea>
+    </label>
+    {% endif %}
+    <button type="submit">Soumettre</button>
+  </form>
+</section>
+{% endblock %}
